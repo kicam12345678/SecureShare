@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>파일 목록</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+
+<header class="topbar">
+    <h2>📁 SecureShare</h2>
+</header>
+
+<div class="container">
+    <h1>파일 목록</h1>
+
+    <form action="/upload" method="post" enctype="multipart/form-data">
+        <input type="file" name="file">
+        <button type="submit">📤 업로드</button>
+    </form>
+
+    <hr>
+
+    <ul>
+        {% for file in files %}
+            <li>{{ file }}</li>
+        {% endfor %}
+    </ul>
+
+    <br>
+
+    <a href="/">
+        <button>🏠 홈으로</button>
+    </a>
+</div>
