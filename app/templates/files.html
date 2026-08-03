@@ -1,35 +1,156 @@
 <!DOCTYPE html>
 <html lang="ko">
+
 <head>
     <meta charset="UTF-8">
-    <title>파일 목록</title>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureShare</title>
+
+    <link rel="stylesheet" href="/static/css/common.css">
+    <link rel="stylesheet" href="/static/css/files.css">
 </head>
+
 <body>
 
-<header class="topbar">
-    <h2>📁 SecureShare</h2>
+<header>
+    <a href="/" class="logo">
+        SecureShare
+    </a>
 </header>
 
-<div class="container">
-    <h1>파일 목록</h1>
+<main>
 
-    <form action="/upload" method="post" enctype="multipart/form-data">
-        <input type="file" name="file">
-        <button type="submit">📤 업로드</button>
-    </form>
+    <div class="top">
 
-    <hr>
+        <div class="page-title">
+            폴더/파일목록
+        </div>
 
-    <ul>
+        <form action="/upload" method="post" enctype="multipart/form-data">
+
+            <input
+                type="file"
+                name="files"
+                multiple
+                required>
+
+            <button
+                type="submit"
+                class="upload-btn">
+                업로드
+            </button>
+
+        </form>
+
+    </div>
+
+    <div class="drop-zone">
+        📂 파일을 여기로 드래그하세요
+        <br>
+        <small>여러 개 파일도 가능합니다.</small>
+    </div>
+
+    <table>
+
+        <thead>
+            <tr>
+                <th>번호</th>
+                <th>파일</th>
+                <th>다운로드</th>
+            </tr>
+        </thead>
+
+        <tbody>
+
         {% for file in files %}
-            <li>{{ file }}</li>
+
+            <tr>
+
+                <td>{{ loop.index }}</td>
+
+                <td>{{ file }}</td>
+
+                <td>
+                    <a
+                        class="download-btn"
+                        href="/download/{{ file }}">
+                        다운로드
+                    </a>
+                </td>
+
+            </tr>
+
         {% endfor %}
-    </ul>
 
-    <br>
+        </tbody>
 
-    <a href="/">
-        <button>🏠 홈으로</button>
-    </a>
-</div>
+    </table>
+
+</main>
+
+<script>
+
+const dropZone = document.querySelector(".drop-zone");
+
+dropZone.addEventListener("dragover", (e) => {
+
+    e.preventDefault();
+
+    dropZone.style.background = "#ffd9d9";
+    dropZone.style.borderColor = "#ff5c5c";
+
+});
+
+dropZone.addEventListener("dragleave", () => {
+
+    dropZone.style.background = "";
+    dropZone.style.borderColor = "";
+
+});
+
+dropZone.addEventListener("drop", async (e) => {
+
+    e.preventDefault();
+
+    dropZone.style.background = "";
+    dropZone.style.borderColor = "";
+
+    const files = e.dataTransfer.files;
+
+    if (files.length === 0) return;
+
+    const formData = new FormData();
+
+    for (let i = 0; i < files.length; i++) {
+
+        formData.append("files", files[i]);
+
+    }
+
+    const response = await fetch("/upload", {
+
+        method: "POST",
+
+        body: formData
+
+    });
+
+    if (response.ok) {
+
+        location.reload();
+
+    }
+
+    else {
+
+        alert("업로드 실패");
+
+    }
+
+});
+
+</script>
+
+</body>
+
+</html>

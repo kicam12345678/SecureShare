@@ -1,0 +1,70 @@
+main{
+
+    width:100%;
+
+    min-height:80vh;
+
+    display:flex;
+
+    flex-direction:column;
+
+    justify-content:center;
+
+    align-items:center;
+}
+
+.title{
+
+    font-family:"Hammersmith One", sans-serif;
+
+    font-size:50px;
+
+    text-align:center;
+
+    color:#C05151;
+
+    border:2px solid #C05151;
+
+    padding:20px 30px;
+
+    margin-bottom:50px;
+}
+
+.folder-button{
+
+    width:70px;
+
+    height:70px;
+
+    border-radius:50%;
+
+    background:#A96A6A;
+
+    display:flex;
+
+    justify-content:center;
+
+    align-items:center;
+
+    text-decoration:none;
+
+    font-size:34px;
+
+    transition:.2s;
+}
+
+.folder-button:hover{
+
+    transform:scale(1.08);
+}
+
+.safe{
+
+    margin-top:18px;
+
+    color:#00C0E8;
+
+    font-size:14px;
+
+    font-weight:bold;
+}

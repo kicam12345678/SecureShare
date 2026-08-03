@@ -1,0 +1,79 @@
+main{
+    width: 760px;
+    margin: 40px auto;
+}
+
+.top{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-bottom:20px;
+}
+
+.page-title{
+    font-family:"Hammersmith One", sans-serif;
+    font-size:18px;
+    color:#C05151;
+    border:1px solid #C05151;
+    padding:6px 14px;
+}
+
+.upload-btn{
+    background:#C05151;
+    color:white;
+    text-decoration:none;
+    padding:8px 18px;
+    border-radius:8px;
+    font-size:13px;
+    font-weight:bold;
+}
+
+.upload-btn:hover{
+    opacity:.9;
+}
+
+table{
+    width:100%;
+    border-collapse:collapse;
+}
+
+th{
+    color:#C05151;
+    border-bottom:2px solid #C05151;
+    padding:10px;
+}
+
+td{
+    text-align:center;
+    padding:12px;
+    color:#C05151;
+    border-bottom:1px solid #d6a0a0;
+}
+
+.download-btn{
+    background:#C05151;
+    color:white;
+    text-decoration:none;
+    padding:6px 12px;
+    border-radius:8px;
+    font-size:12px;
+}
+
+.download-btn:hover{
+    opacity:.9;
+}
+.drop-zone{
+    margin:30px 0;
+    padding:40px;
+    border:3px dashed #C05151;
+    border-radius:20px;
+    text-align:center;
+    color:#C05151;
+    background:#fff7f7;
+    font-size:20px;
+    transition:.3s;
+}
+
+.drop-zone:hover{
+    background:#ffeaea;
+}

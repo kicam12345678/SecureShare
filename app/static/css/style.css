@@ -1,44 +1,102 @@
-body {
-    margin: 0;
-    font-family: Arial, sans-serif;
-    background: #f5f7fb;
+/* ===========================
+   SecureShare
+   =========================== */
+
+*{
+    margin:0;
+    padding:0;
+    box-sizing:border-box;
 }
 
-.topbar {
-    background: #2563eb;
-    color: white;
-    padding: 15px 25px;
+body{
+    font-family:Arial, Helvetica, sans-serif;
+    background:#ececec;
+    color:#333;
 }
 
-.topbar h2 {
-    margin: 0;
+/* 상단 바 */
+
+.topbar{
+    height:65px;
+
+    background:#b76b6b;
+
+    color:white;
+
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+
+    padding:0 25px;
 }
 
-.container {
-    text-align: center;
-    margin-top: 80px;
+.logo{
+    font-size:24px;
+    font-weight:bold;
 }
 
-.container h1 {
-    color: #2563eb;
+.status{
+
+    background:#ffffff22;
+
+    padding:8px 15px;
+
+    border-radius:20px;
+
+    font-size:14px;
 }
 
-.container p {
-    color: #666;
-    font-size: 18px;
+/* 메인 */
+
+.container{
+
+    width:90%;
+
+    max-width:1100px;
+
+    margin:50px auto;
+
+    text-align:center;
 }
 
-button {
-    margin-top: 20px;
-    padding: 12px 25px;
-    border: none;
-    border-radius: 10px;
-    background: #2563eb;
-    color: white;
-    font-size: 16px;
-    cursor: pointer;
+.title{
+
+    font-size:48px;
+
+    color:#b76b6b;
+
+    margin-bottom:20px;
 }
 
-button:hover {
-    background: #1d4ed8;
+.subtitle{
+
+    font-size:20px;
+
+    color:#666;
+
+    margin-bottom:40px;
+}
+
+/* 버튼 */
+
+.btn{
+
+    display:inline-block;
+
+    background:#b76b6b;
+
+    color:white;
+
+    text-decoration:none;
+
+    padding:14px 30px;
+
+    border-radius:12px;
+
+    transition:.25s;
+}
+
+.btn:hover{
+
+    background:#a65454;
 }

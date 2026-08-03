@@ -1,7 +1,8 @@
 import os
+from typing import List
 
 from fastapi import FastAPI, Request, UploadFile, File
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, FileResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -10,6 +11,8 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 templates = Jinja2Templates(directory="app/templates")
+
+os.makedirs("uploads", exist_ok=True)
 
 
 @app.get("/")
@@ -34,8 +37,18 @@ def files(request: Request):
 
 
 @app.post("/upload")
-async def upload_file(file: UploadFile = File(...)):
-    with open(f"uploads/{file.filename}", "wb") as buffer:
-        buffer.write(await file.read())
+async def upload_files(files: List[UploadFile] = File(...)):
+    for file in files:
+
+        with open(f"uploads/{file.filename}", "wb") as buffer:
+            buffer.write(await file.read())
 
     return RedirectResponse(url="/files", status_code=303)
+
+
+@app.get("/download/{filename}")
+def download_file(filename: str):
+    return FileResponse(
+        path=f"uploads/{filename}",
+        filename=filename
+    )
