@@ -13,9 +13,13 @@
 <body>
 
 <header>
+
     <a href="/" class="logo">
+
         SecureShare
+
     </a>
+
 </header>
 
 <main>
@@ -23,10 +27,17 @@
     <div class="top">
 
         <div class="page-title">
+
             폴더/파일목록
+
         </div>
 
         <form action="/upload" method="post" enctype="multipart/form-data">
+
+            <input
+                type="hidden"
+                name="path"
+                value="{{ current_path }}">
 
             <input
                 type="file"
@@ -37,27 +48,91 @@
             <button
                 type="submit"
                 class="upload-btn">
+
                 업로드
+
             </button>
 
         </form>
 
     </div>
 
-    <div class="drop-zone">
-        📂 파일을 여기로 드래그하세요
-        <br>
-        <small>여러 개 파일도 가능합니다.</small>
+    <div class="current-path">
+
+        📂 현재 위치 :
+
+        {% if current_path == "" %}
+
+            uploads
+
+        {% else %}
+
+            uploads / {{ current_path }}
+
+        {% endif %}
+
     </div>
 
-    <table>
+    {% if current_path != "" %}
+
+    <div style="margin:15px 0;">
+
+        <a
+            class="download-btn"
+            href="/files?path={{ parent }}">
+
+            ⬅ 뒤로가기
+
+        </a>
+
+    </div>
+
+    {% endif %}
+
+    <button
+        class="folder-btn"
+        type="button"
+        onclick="createFolder()">
+
+        📁 새 폴더
+
+    </button>
+
+    <input
+        id="searchInput"
+        class="search-box"
+        type="text"
+        placeholder="🔍 검색">
+
+    <div class="drop-zone">
+
+        📂 파일을 여기로 드래그하세요
+
+        <br>
+
+        <small>
+
+            여러 개 파일도 가능합니다.
+
+        </small>
+
+    </div>
+
+    <table id="fileTable">
 
         <thead>
+
             <tr>
+
                 <th>번호</th>
-                <th>파일</th>
+                <th>이름</th>
+                <th>크기</th>
+                <th>업로드 날짜</th>
                 <th>다운로드</th>
+                <th>삭제</th>
+
             </tr>
+
         </thead>
 
         <tbody>
@@ -68,14 +143,67 @@
 
                 <td>{{ loop.index }}</td>
 
-                <td>{{ file }}</td>
+                <td>
+
+                    {% if file.is_dir %}
+
+                    <a
+                        href="/files?path={% if current_path %}{{ current_path }}/{{ file.name }}{% else %}{{ file.name }}{% endif %}"
+                        style="text-decoration:none;color:#C05151;font-weight:bold;">
+
+                        📁 {{ file.name }}
+
+                    </a>
+
+                    {% else %}
+
+                    📄 {{ file.name }}
+
+                    {% endif %}
+
+                </td>
+
+                <td>{{ file.size }}</td>
+
+                <td>{{ file.date }}</td>
 
                 <td>
+
+                    {% if file.is_dir %}
+
                     <a
                         class="download-btn"
-                        href="/download/{{ file }}">
-                        다운로드
+                        href="/download-folder/{% if current_path %}{{ current_path }}/{% endif %}{{ file.name }}">
+
+                        📦 ZIP
+
                     </a>
+
+                    {% else %}
+
+                    <a
+                        class="download-btn"
+                        href="/download/{% if current_path %}{{ current_path }}/{% endif %}{{ file.name }}">
+
+                        다운로드
+
+                    </a>
+
+                    {% endif %}
+
+                </td>
+
+                <td>
+
+                    <a
+                        class="delete-btn"
+                        href="/delete/{% if current_path %}{{ current_path }}/{% endif %}{{ file.name }}"
+                        onclick="return confirm('삭제하시겠습니까?');">
+
+                        삭제
+
+                    </a>
+
                 </td>
 
             </tr>
@@ -85,63 +213,114 @@
         </tbody>
 
     </table>
-
-</main>
+    </main>
 
 <script>
 
-const dropZone = document.querySelector(".drop-zone");
+async function createFolder(){
 
-dropZone.addEventListener("dragover", (e) => {
+    const folderName = prompt("새 폴더 이름을 입력하세요.");
 
-    e.preventDefault();
+    if(folderName === null) return;
 
-    dropZone.style.background = "#ffd9d9";
-    dropZone.style.borderColor = "#ff5c5c";
+    if(folderName.trim() === "") return;
 
-});
+    const form = new FormData();
 
-dropZone.addEventListener("dragleave", () => {
+    form.append("folder_name", folderName);
 
-    dropZone.style.background = "";
-    dropZone.style.borderColor = "";
+    form.append("path", "{{ current_path }}");
 
-});
-
-dropZone.addEventListener("drop", async (e) => {
-
-    e.preventDefault();
-
-    dropZone.style.background = "";
-    dropZone.style.borderColor = "";
-
-    const files = e.dataTransfer.files;
-
-    if (files.length === 0) return;
-
-    const formData = new FormData();
-
-    for (let i = 0; i < files.length; i++) {
-
-        formData.append("files", files[i]);
-
-    }
-
-    const response = await fetch("/upload", {
+    const response = await fetch("/create-folder", {
 
         method: "POST",
 
-        body: formData
+        body: form
 
     });
 
-    if (response.ok) {
+    if(response.ok){
 
         location.reload();
 
+    }else{
+
+        alert("폴더 생성 실패");
+
     }
 
-    else {
+}
+
+// 검색
+
+const search = document.getElementById("searchInput");
+
+search.addEventListener("keyup", function(){
+
+    const keyword = this.value.toLowerCase();
+
+    document.querySelectorAll("#fileTable tbody tr").forEach(row=>{
+
+        row.style.display =
+            row.cells[1].innerText.toLowerCase().includes(keyword)
+            ? ""
+            : "none";
+
+    });
+
+});
+
+// 드래그 업로드
+
+const drop = document.querySelector(".drop-zone");
+
+drop.addEventListener("dragover", e=>{
+
+    e.preventDefault();
+
+    drop.style.background = "#ffd9d9";
+
+});
+
+drop.addEventListener("dragleave", ()=>{
+
+    drop.style.background = "";
+
+});
+
+drop.addEventListener("drop", async e=>{
+
+    e.preventDefault();
+
+    drop.style.background = "";
+
+    const files = e.dataTransfer.files;
+
+    if(files.length === 0) return;
+
+    const form = new FormData();
+
+    form.append("path", "{{ current_path }}");
+
+    for(let i = 0; i < files.length; i++){
+
+        form.append("files", files[i]);
+
+    }
+
+    const res = await fetch("/upload", {
+
+        method: "POST",
+
+        body: form
+
+    });
+
+    if(res.ok){
+
+        location.reload();
+
+    }else{
 
         alert("업로드 실패");
 
