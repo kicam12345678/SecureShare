@@ -73,30 +73,43 @@
 
     </div>
 
-    {% if current_path != "" %}
+    <div class="top-actions">
 
-    <div style="margin:15px 0;">
-
+        {% if current_path != "" %}
         <a
-            class="download-btn"
+            class="back-btn"
             href="/files?path={{ parent }}">
 
             ⬅ 뒤로가기
 
         </a>
+        {% endif %}
+
+        <a
+            class="trash-btn"
+            href="/trash">
+
+            <span class="trash-icon">🗑</span>
+            <span class="trash-label">휴지통</span>
+
+        </a>
 
     </div>
 
-    {% endif %}
+    <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:15px; align-items:center;">
 
-    <button
-        class="folder-btn"
-        type="button"
-        onclick="createFolder()">
+        <button
+            class="folder-btn"
+            type="button"
+            onclick="createFolder()">
 
-        📁 새 폴더
+            📁 새 폴더
 
-    </button>
+        </button>
+
+        <span id="clipboardStatus" style="color:#C05151; font-weight:bold;"></span>
+
+    </div>
 
     <input
         id="searchInput"
@@ -128,8 +141,7 @@
                 <th>이름</th>
                 <th>크기</th>
                 <th>업로드 날짜</th>
-                <th>다운로드</th>
-                <th>삭제</th>
+                <th>작업</th>
 
             </tr>
 
@@ -139,7 +151,13 @@
 
         {% for file in files %}
 
-            <tr>
+            <tr
+                class="file-row"
+                data-name="{{ file.name }}"
+                data-path="{{ current_path }}"
+                data-isdir="{{ '1' if file.is_dir else '0' }}"
+                data-preview="{{ '1' if file.name.lower().endswith(('.png','.jpg','.jpeg','.gif','.webp','.pdf','.mp4','.webm')) else '0' }}"
+                onclick="openRowMenu(event)">
 
                 <td>{{ loop.index }}</td>
 
@@ -149,15 +167,28 @@
 
                     <a
                         href="/files?path={% if current_path %}{{ current_path }}/{{ file.name }}{% else %}{{ file.name }}{% endif %}"
-                        style="text-decoration:none;color:#C05151;font-weight:bold;">
+                        class="file-link"
+                        onclick="event.stopPropagation()">
 
                         📁 {{ file.name }}
 
                     </a>
 
+                    {% elif file.name.lower().endswith(('.png','.jpg','.jpeg','.gif','.webp','.pdf')) %}
+
+                    <a
+                        href="/preview/{% if current_path %}{{ current_path }}/{% endif %}{{ file.name }}"
+                        target="_blank"
+                        class="file-link preview-link"
+                        onclick="event.stopPropagation()">
+
+                        👁 {{ file.name }}
+
+                    </a>
+
                     {% else %}
 
-                    📄 {{ file.name }}
+                    <span class="file-text">📄 {{ file.name }}</span>
 
                     {% endif %}
 
@@ -169,40 +200,14 @@
 
                 <td>
 
-                    {% if file.is_dir %}
-
-                    <a
-                        class="download-btn"
-                        href="/download-folder/{% if current_path %}{{ current_path }}/{% endif %}{{ file.name }}">
-
-                        📦 ZIP
-
-                    </a>
-
-                    {% else %}
-
-                    <a
-                        class="download-btn"
-                        href="/download/{% if current_path %}{{ current_path }}/{% endif %}{{ file.name }}">
-
-                        다운로드
-
-                    </a>
-
-                    {% endif %}
-
-                </td>
-
-                <td>
-
-                    <a
-                        class="delete-btn"
-                        href="/delete/{% if current_path %}{{ current_path }}/{% endif %}{{ file.name }}"
-                        onclick="return confirm('삭제하시겠습니까?');">
-
-                        삭제
-
-                    </a>
+                    <button
+                        class="menu-trigger"
+                        type="button"
+                        onclick="openRowMenu(event); event.stopPropagation();"
+                        aria-haspopup="true"
+                        aria-expanded="false">
+                        ⋮
+                    </button>
 
                 </td>
 
@@ -213,6 +218,8 @@
         </tbody>
 
     </table>
+
+    <div id="actionMenu" class="action-menu hidden" role="menu" aria-hidden="true"></div>
     </main>
 
 <script>
@@ -246,6 +253,233 @@ async function createFolder(){
     }else{
 
         alert("폴더 생성 실패");
+
+    }
+
+}
+
+async function selectFolder(){
+    const response = await fetch('/folders');
+    if(!response.ok) return null;
+
+    const folders = await response.json();
+    const choices = folders.map((folder, index) =>
+        `${index + 1}. ${folder || '(root)'}`
+    ).join('\n');
+
+    const selected = prompt(`목록에서 폴더 번호를 입력하세요:\n${choices}`);
+    if(selected === null) return null;
+
+    const index = parseInt(selected, 10) - 1;
+    if(isNaN(index) || index < 0 || index >= folders.length) return null;
+
+    return folders[index];
+}
+
+const actionMenu = document.getElementById('actionMenu');
+let clipboard = null;
+
+function closeActionMenu(){
+    actionMenu.classList.add('hidden');
+    actionMenu.setAttribute('aria-hidden', 'true');
+    actionMenu.innerHTML = '';
+}
+
+function buildMenuItem(label, action){
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'menu-item';
+    button.textContent = label;
+    button.addEventListener('click', event => {
+        event.stopPropagation();
+        action();
+        closeActionMenu();
+    });
+    return button;
+}
+
+function openRowMenu(event){
+    event.stopPropagation();
+
+    const row = event.target.closest('tr.file-row');
+    if(!row) return;
+
+    const name = row.dataset.name;
+    const path = row.dataset.path;
+    const isDir = row.dataset.isdir === '1';
+    const canPreview = row.dataset.preview === '1';
+    const fullPath = path ? `${path}/${name}` : name;
+
+    actionMenu.innerHTML = '';
+
+    const downloadAction = () => {
+        const url = isDir
+            ? `/download-folder/${encodeURIComponent(fullPath)}`
+            : `/download/${encodeURIComponent(fullPath)}`;
+        window.location.href = url;
+    };
+
+    actionMenu.appendChild(buildMenuItem('⬇ 다운로드', downloadAction));
+
+    if(canPreview && !isDir){
+        actionMenu.appendChild(buildMenuItem('👁 미리보기', () => {
+            window.open(`/preview/${encodeURIComponent(fullPath)}`, '_blank');
+        }));
+    }
+
+    actionMenu.appendChild(buildMenuItem('✏ 이름 변경', () => renameFile(name)));
+    actionMenu.appendChild(buildMenuItem('📂 이동', () => moveItem(name)));
+    actionMenu.appendChild(buildMenuItem('✂ 잘라내기', () => cutItem(name)));
+
+    const pasteButton = buildMenuItem('📋 붙여넣기', () => pasteClipboard());
+    if(!clipboard){
+        pasteButton.disabled = true;
+        pasteButton.classList.add('disabled');
+    }
+    actionMenu.appendChild(pasteButton);
+
+    actionMenu.appendChild(buildMenuItem('🗑 삭제', () => {
+        if(window.confirm('삭제하시겠습니까?')){
+            window.location.href = `/delete/${encodeURIComponent(fullPath)}`;
+        }
+    }));
+
+    const rect = row.getBoundingClientRect();
+    actionMenu.style.top = `${window.scrollY + rect.bottom + 8}px`;
+    actionMenu.style.left = `${rect.left}px`;
+    actionMenu.classList.remove('hidden');
+    actionMenu.setAttribute('aria-hidden', 'false');
+}
+
+async function moveItem(itemName){
+    const dest = await selectFolder();
+    if(dest === null) return;
+
+    const form = new FormData();
+    form.append('item_name', itemName);
+    form.append('path', '{{ current_path }}');
+    form.append('dest', dest);
+
+    await fetch('/move', {
+        method: 'POST',
+        body: form
+    });
+
+    location.reload();
+}
+
+async function copyItem(itemName){
+    const dest = await selectFolder();
+    if(dest === null) return;
+
+    const form = new FormData();
+    form.append('item_name', itemName);
+    form.append('path', '{{ current_path }}');
+    form.append('dest', dest);
+
+    await fetch('/copy', {
+        method: 'POST',
+        body: form
+    });
+
+    location.reload();
+}
+
+function updateClipboardStatus(){
+    const status = document.getElementById('clipboardStatus');
+    if(clipboard){
+        status.textContent = `${clipboard.action === 'cut' ? '잘라낸 항목' : '복사한 항목'}: ${clipboard.item}`;
+    } else {
+        status.textContent = '';
+    }
+}
+
+function cutItem(itemName){
+    clipboard = {
+        item: itemName,
+        action: 'cut',
+        path: '{{ current_path }}'
+    };
+    updateClipboardStatus();
+}
+
+async function pasteClipboard(){
+    if(!clipboard){
+        alert('붙여넣기할 항목이 없습니다.');
+        return;
+    }
+
+    const form = new FormData();
+    form.append('item_name', clipboard.item);
+    form.append('action', clipboard.action);
+    form.append('path', clipboard.path);
+    form.append('dest', '{{ current_path }}');
+
+    await fetch('/paste', {
+        method: 'POST',
+        body: form
+    });
+
+    clipboard = null;
+    updateClipboardStatus();
+    location.reload();
+}
+
+document.addEventListener('click', event => {
+    if(!actionMenu.contains(event.target)){
+        closeActionMenu();
+    }
+});
+
+document.addEventListener('scroll', closeActionMenu);
+window.addEventListener('resize', closeActionMenu);
+
+async function renameFile(oldName){
+
+    let defaultName = oldName;
+
+    let extension = "";
+
+    const dot = oldName.lastIndexOf(".");
+
+    // 파일이면 확장자 분리
+    if(dot > 0){
+
+        defaultName = oldName.substring(0, dot);
+
+        extension = oldName.substring(dot);
+
+    }
+
+    const newName = prompt("새 이름을 입력하세요.", defaultName);
+
+    if(newName === null) return;
+
+    if(newName.trim() === "") return;
+
+    const form = new FormData();
+
+    form.append("old_name", oldName);
+
+    form.append("new_name", newName + extension);
+
+    form.append("path", "{{ current_path }}");
+
+    const response = await fetch("/rename",{
+
+        method:"POST",
+
+        body:form
+
+    });
+
+    if(response.ok){
+
+        location.reload();
+
+    }else{
+
+        alert("이름 변경 실패");
 
     }
 

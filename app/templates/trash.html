@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureShare - 휴지통</title>
+
+    <link rel="stylesheet" href="/static/css/common.css">
+    <link rel="stylesheet" href="/static/css/files.css">
+</head>
+
+<body>
+
+<header>
+    <a href="/" class="logo">SecureShare</a>
+</header>
+
+<main>
+    <div class="trash-header-card">
+        <div>
+            <div class="page-title">🗑 휴지통</div>
+            <p class="trash-summary">삭제된 항목을 안전하게 관리하세요. 휴지통에 담긴 파일은 언제든 복원하거나 영구 삭제할 수 있습니다.</p>
+        </div>
+        <div class="trash-header-actions">
+            <a class="back-btn" href="/files">파일 목록으로</a>
+            <form action="/trash/empty" method="post" style="margin:0;">
+                <button class="delete-btn" type="submit">휴지통 비우기</button>
+            </form>
+        </div>
+    </div>
+
+    <div class="trash-stats-card">
+        <div class="trash-stat">
+            <span class="stat-label">삭제된 항목</span>
+            <strong class="stat-value">{{ items|length }}</strong>
+        </div>
+        <div class="trash-stat">
+            <span class="stat-label">최신 삭제</span>
+            <strong class="stat-value">{% if items %}{{ items[0].deleted_at }}{% else %}-{% endif %}</strong>
+        </div>
+    </div>
+
+    <table id="fileTable">
+        <thead>
+            <tr>
+                <th>번호</th>
+                <th>이름</th>
+                <th>원래 위치</th>
+                <th>삭제일</th>
+                <th>크기</th>
+                <th>작업</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% if items %}
+                {% for item in items %}
+                    <tr>
+                        <td>{{ loop.index }}</td>
+                        <td>
+                            {% if item.is_dir %}
+                                📁 {{ item.name }}
+                            {% else %}
+                                📄 {{ item.name }}
+                            {% endif %}
+                        </td>
+                        <td>{{ item.original }}</td>
+                        <td>{{ item.deleted_at }}</td>
+                        <td>{{ item.size }}</td>
+                        <td>
+                            <div class="action-buttons">
+                                <form action="/trash/restore" method="post" style="margin:0;">
+                                    <input type="hidden" name="trash_name" value="{{ item.trash_name }}">
+                                    <button class="rename-btn" type="submit">복원</button>
+                                </form>
+                                <form action="/trash/delete" method="post" style="margin:0;">
+                                    <input type="hidden" name="trash_name" value="{{ item.trash_name }}">
+                                    <button class="delete-btn" type="submit">영구삭제</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="6">휴지통이 비어 있습니다.</td>
+                </tr>
+            {% endif %}
+        </tbody>
+    </table>
+</main>
+
+</body>
+
+</html>
