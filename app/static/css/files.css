@@ -1,7 +1,13 @@
 main{
-    width:920px;
+    width:min(920px, calc(100% - 32px));
     margin:36px auto;
     font-family:"Segoe UI", system-ui, sans-serif;
+}
+
+.table-wrap{
+    width:100%;
+    overflow-x:auto;
+    border-radius:18px;
 }
 
 .top{
@@ -202,6 +208,38 @@ table{
     border-radius:18px;
     overflow:hidden;
     box-shadow:0 18px 40px rgba(0,0,0,0.08);
+}
+
+@media (max-width: 640px){
+    main{
+        margin:20px auto;
+    }
+
+    .top{
+        align-items:flex-start;
+        flex-direction:column;
+        gap:14px;
+    }
+
+    .top form{
+        display:flex;
+        width:100%;
+        align-items:center;
+        gap:8px;
+    }
+
+    .top form input[type="file"]{
+        min-width:0;
+        width:100%;
+    }
+
+    .table-wrap table{
+        min-width:680px;
+    }
+
+    header{
+        padding:16px;
+    }
 }
 
 th{
@@ -412,6 +450,27 @@ td:nth-child(6){
 .menu-item.disabled{
     color:#b8a2a2;
     cursor:not-allowed;
+}
+
+.trash-header-actions .back-btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-height:44px;
+    color:#7a3131;
+    background:#fff;
+    border:1px solid rgba(192,81,81,0.42);
+    box-shadow:0 4px 12px rgba(90,30,30,0.08);
+    opacity:1;
+    visibility:visible;
+}
+
+.trash-header-actions .back-btn:hover,
+.trash-header-actions .back-btn:focus-visible{
+    color:#fff;
+    background:#C05151;
+    outline:2px solid rgba(192,81,81,0.28);
+    outline-offset:2px;
 }
 
 .delete-btn[disabled],

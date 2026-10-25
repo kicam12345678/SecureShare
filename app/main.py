@@ -116,8 +116,9 @@ def move_to_trash(filename: str):
 @app.get("/")
 def home(request: Request):
     return templates.TemplateResponse(
-        "index.html",
-        {"request": request}
+        request=request,
+        name="index.html",
+        context={}
     )
 
 
@@ -177,13 +178,9 @@ def files(request: Request, path: str = ""):
         parent = os.path.dirname(path)
 
     return templates.TemplateResponse(
-
-        "files.html",
-
-        {
-
-            "request": request,
-
+        request=request,
+        name="files.html",
+        context={
             "files": file_list,
 
             "current_path": path,
@@ -412,9 +409,9 @@ def trash(request: Request):
         })
 
     return templates.TemplateResponse(
-        "trash.html",
-        {
-            "request": request,
+        request=request,
+        name="trash.html",
+        context={
             "items": items
         }
     )
