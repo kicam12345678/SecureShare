@@ -68,3 +68,36 @@ main{
 
     font-weight:bold;
 }
+
+.safe.scanner-missing{
+    color:#892a2a;
+}
+
+@media (max-width: 640px){
+    main{
+        width:100%;
+        min-height:calc(100vh - 72px);
+        min-height:calc(100svh - 72px);
+        padding:24px 20px 48px;
+    }
+
+    .title{
+        width:100%;
+        max-width:420px;
+        font-size:clamp(30px, 9vw, 42px);
+        line-height:1.25;
+        padding:24px 16px;
+        margin-bottom:32px;
+        border-radius:18px;
+    }
+
+    .folder-button{
+        width:76px;
+        height:76px;
+        font-size:36px;
+    }
+
+    .safe{
+        font-size:15px;
+    }
+}

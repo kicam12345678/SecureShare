@@ -41,7 +41,7 @@
         </div>
     </div>
 
-    <table id="fileTable">
+    <table id="fileTable" class="trash-list">
         <thead>
             <tr>
                 <th>번호</th>
@@ -56,18 +56,18 @@
             {% if items %}
                 {% for item in items %}
                     <tr>
-                        <td>{{ loop.index }}</td>
-                        <td>
+                        <td data-label="번호">{{ loop.index }}</td>
+                        <td data-label="이름" class="trash-name-cell">
                             {% if item.is_dir %}
                                 📁 {{ item.name }}
                             {% else %}
                                 📄 {{ item.name }}
                             {% endif %}
                         </td>
-                        <td>{{ item.original }}</td>
-                        <td>{{ item.deleted_at }}</td>
-                        <td>{{ item.size }}</td>
-                        <td>
+                        <td data-label="원래 위치">{{ item.original }}</td>
+                        <td data-label="삭제일">{{ item.deleted_at }}</td>
+                        <td data-label="크기">{{ item.size }}</td>
+                        <td data-label="작업" class="trash-action-cell">
                             <div class="action-buttons">
                                 <form action="/trash/restore" method="post" style="margin:0;">
                                     <input type="hidden" name="trash_name" value="{{ item.trash_name }}">
@@ -82,7 +82,7 @@
                     </tr>
                 {% endfor %}
             {% else %}
-                <tr>
+                <tr class="empty-row">
                     <td colspan="6">휴지통이 비어 있습니다.</td>
                 </tr>
             {% endif %}

@@ -41,14 +41,16 @@ SecureShare
 
 </a>
 
-<p class="safe">
-
-안전함
-
+<p class="safe {% if not scanner_installed %}scanner-missing{% endif %}">
+{% if scanner_installed %}
+업로드 전 ClamAV 검사
+{% else %}
+ClamAV 검사 엔진 설치 필요
+{% endif %}
 </p>
 
 </main>
 
 </body>
 
-</html>dd
+</html>

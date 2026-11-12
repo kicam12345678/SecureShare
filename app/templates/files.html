@@ -32,7 +32,7 @@
 
         </div>
 
-        <form action="/upload" method="post" enctype="multipart/form-data">
+        <form id="uploadForm" action="/upload" method="post" enctype="multipart/form-data">
 
             <input
                 type="hidden"
@@ -47,7 +47,8 @@
 
             <button
                 type="submit"
-                class="upload-btn">
+                class="upload-btn"
+                id="uploadButton">
 
                 업로드
 
@@ -73,9 +74,22 @@
 
     </div>
 
+    {% if upload_error %}
+    <div class="upload-alert" role="alert">
+        {% if upload_error == "scanner_unavailable" %}
+            ClamAV 검사 엔진을 찾지 못해 업로드를 중단했어요. SecureShare를 실행하는 컴퓨터에 ClamAV를 설치해 주세요.
+        {% elif upload_error == "scan_blocked" %}
+            악성코드가 감지됐거나 검사를 끝내지 못해 파일을 저장하지 않았어요.
+        {% elif upload_error == "too_large" %}
+            검사할 수 있는 파일 크기는 한 개당 최대 100 MiB예요.
+        {% else %}
+            파일을 검사하지 못해 업로드를 중단했어요. ClamAV와 바이러스 서명 데이터베이스 상태를 확인해 주세요.
+        {% endif %}
+    </div>
+    {% endif %}
+
     <div class="top-actions">
 
-        {% if current_path != "" %}
         <a
             class="back-btn"
             href="/files?path={{ parent }}">
@@ -83,7 +97,6 @@
             ⬅ 뒤로가기
 
         </a>
-        {% endif %}
 
         <a
             class="trash-btn"
@@ -108,6 +121,9 @@
         </button>
 
         <span id="clipboardStatus" style="color:#C05151; font-weight:bold;"></span>
+        <span id="selectionStatus" class="selection-status" aria-live="polite">0개 선택됨</span>
+        <button id="selectVisibleFilesBtn" class="select-all-btn" type="button">전체 선택</button>
+        <button id="clearSelectionBtn" class="clear-selection-btn" type="button" hidden>선택 해제</button>
 
     </div>
 
@@ -121,6 +137,8 @@
 
         📂 파일을 여기로 드래그하세요
 
+        <div id="uploadStatus" role="status" aria-live="polite"></div>
+
         <br>
 
         <small>
@@ -132,13 +150,16 @@
     </div>
 
     <div class="table-wrap">
-    <table id="fileTable">
+    <table id="fileTable" class="file-list">
 
         <thead>
 
             <tr>
 
-                <th>번호</th>
+                <th class="selection-cell">
+                    전체
+                    <input id="selectAllFiles" class="select-checkbox" type="checkbox" aria-label="보이는 파일 전체 선택" disabled>
+                </th>
                 <th>이름</th>
                 <th>크기</th>
                 <th>업로드 날짜</th>
@@ -157,12 +178,14 @@
                 data-name="{{ file.name }}"
                 data-path="{{ current_path }}"
                 data-isdir="{{ '1' if file.is_dir else '0' }}"
-                data-preview="{{ '1' if file.name.lower().endswith(('.png','.jpg','.jpeg','.gif','.webp','.pdf','.mp4','.webm')) else '0' }}"
+                data-preview="{{ '1' if file.has_preview else '0' }}"
                 onclick="openRowMenu(event)">
 
-                <td>{{ loop.index }}</td>
+                <td data-label="선택" class="selection-cell">
+                    <input class="select-checkbox file-select-checkbox" type="checkbox" aria-label="{{ file.name }} 선택" onclick="event.stopPropagation()">
+                </td>
 
-                <td>
+                <td data-label="이름" class="file-name-cell">
 
                     {% if file.is_dir %}
 
@@ -175,7 +198,7 @@
 
                     </a>
 
-                    {% elif file.name.lower().endswith(('.png','.jpg','.jpeg','.gif','.webp','.pdf')) %}
+                    {% elif file.is_preview %}
 
                     <a
                         href="/preview/{% if current_path %}{{ current_path }}/{% endif %}{{ file.name }}"
@@ -195,11 +218,11 @@
 
                 </td>
 
-                <td>{{ file.size }}</td>
+                <td data-label="크기">{{ file.size }}</td>
 
-                <td>{{ file.date }}</td>
+                <td data-label="수정일">{{ file.date }}</td>
 
-                <td>
+                <td data-label="작업" class="file-action-cell">
 
                     <button
                         class="menu-trigger"
@@ -234,7 +257,7 @@ async function createFolder(){
 
     if(folderName.trim() === "") return;
 
-    const form = new FormData();
+    const form = new URLSearchParams();
 
     form.append("folder_name", folderName);
 
@@ -260,6 +283,12 @@ async function createFolder(){
 
 }
 
+document.getElementById("uploadForm").addEventListener("submit", () => {
+    const button = document.getElementById("uploadButton");
+    button.disabled = true;
+    button.textContent = "업로드 및 검사 중…";
+});
+
 async function selectFolder(){
     const response = await fetch('/folders');
     if(!response.ok) return null;
@@ -280,11 +309,71 @@ async function selectFolder(){
 
 const actionMenu = document.getElementById('actionMenu');
 let clipboard = null;
+let openMenuTrigger = null;
+const selectAllFiles = document.getElementById('selectAllFiles');
+const selectionStatus = document.getElementById('selectionStatus');
+const selectVisibleFilesBtn = document.getElementById('selectVisibleFilesBtn');
+const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+
+function updateSelectionState(){
+    const rows = [...document.querySelectorAll('#fileTable tbody tr.file-row')];
+    const visibleRows = rows.filter(row => getComputedStyle(row).display !== 'none');
+    const selectedRows = rows.filter(row => row.querySelector('.file-select-checkbox').checked);
+
+    rows.forEach(row => {
+        row.classList.toggle('is-selected', row.querySelector('.file-select-checkbox').checked);
+    });
+
+    selectionStatus.textContent = `${selectedRows.length}개 선택됨`;
+    clearSelectionBtn.hidden = selectedRows.length === 0;
+
+    const visibleBoxes = visibleRows.map(row => row.querySelector('.file-select-checkbox'));
+    const visibleSelected = visibleBoxes.filter(checkbox => checkbox.checked).length;
+    selectAllFiles.checked = visibleBoxes.length > 0 && visibleSelected === visibleBoxes.length;
+    selectAllFiles.indeterminate = visibleSelected > 0 && visibleSelected < visibleBoxes.length;
+    selectAllFiles.disabled = visibleBoxes.length === 0;
+    selectVisibleFilesBtn.disabled = visibleBoxes.length === 0;
+}
+
+selectAllFiles.addEventListener('change', () => {
+    document.querySelectorAll('#fileTable tbody tr.file-row').forEach(row => {
+        if(getComputedStyle(row).display !== 'none'){
+            row.querySelector('.file-select-checkbox').checked = selectAllFiles.checked;
+        }
+    });
+    updateSelectionState();
+});
+
+selectVisibleFilesBtn.addEventListener('click', () => {
+    document.querySelectorAll('#fileTable tbody tr.file-row').forEach(row => {
+        if(getComputedStyle(row).display !== 'none'){
+            row.querySelector('.file-select-checkbox').checked = true;
+        }
+    });
+    updateSelectionState();
+});
+
+document.querySelectorAll('.file-select-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', updateSelectionState);
+});
+
+clearSelectionBtn.addEventListener('click', () => {
+    document.querySelectorAll('.file-select-checkbox').forEach(checkbox => {
+        checkbox.checked = false;
+    });
+    updateSelectionState();
+});
+
+updateSelectionState();
 
 function closeActionMenu(){
     actionMenu.classList.add('hidden');
     actionMenu.setAttribute('aria-hidden', 'true');
     actionMenu.innerHTML = '';
+    if(openMenuTrigger){
+        openMenuTrigger.setAttribute('aria-expanded', 'false');
+        openMenuTrigger = null;
+    }
 }
 
 function buildMenuItem(label, action){
@@ -305,6 +394,14 @@ function openRowMenu(event){
 
     const row = event.target.closest('tr.file-row');
     if(!row) return;
+
+    const trigger = event.target.closest('.menu-trigger') || row.querySelector('.menu-trigger');
+    if(!trigger) return;
+    if(openMenuTrigger && openMenuTrigger !== trigger){
+        openMenuTrigger.setAttribute('aria-expanded', 'false');
+    }
+    openMenuTrigger = trigger;
+    trigger.setAttribute('aria-expanded', 'true');
 
     const name = row.dataset.name;
     const path = row.dataset.path;
@@ -346,18 +443,36 @@ function openRowMenu(event){
         }
     }));
 
-    const rect = row.getBoundingClientRect();
-    actionMenu.style.top = `${window.scrollY + rect.bottom + 8}px`;
-    actionMenu.style.left = `${rect.left}px`;
+    actionMenu.style.top = '0px';
+    actionMenu.style.left = '0px';
     actionMenu.classList.remove('hidden');
     actionMenu.setAttribute('aria-hidden', 'false');
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const menuRect = actionMenu.getBoundingClientRect();
+    const gap = 8;
+    const edge = 8;
+    let left = triggerRect.right + gap;
+    if(left + menuRect.width > window.innerWidth - edge){
+        left = triggerRect.left - menuRect.width - gap;
+    }
+    left = Math.max(edge, Math.min(left, window.innerWidth - menuRect.width - edge));
+
+    let top = triggerRect.top;
+    if(top + menuRect.height > window.innerHeight - edge){
+        top = window.innerHeight - menuRect.height - edge;
+    }
+    top = Math.max(edge, top);
+
+    actionMenu.style.top = `${window.scrollY + top}px`;
+    actionMenu.style.left = `${window.scrollX + left}px`;
 }
 
 async function moveItem(itemName){
     const dest = await selectFolder();
     if(dest === null) return;
 
-    const form = new FormData();
+    const form = new URLSearchParams();
     form.append('item_name', itemName);
     form.append('path', '{{ current_path }}');
     form.append('dest', dest);
@@ -374,7 +489,7 @@ async function copyItem(itemName){
     const dest = await selectFolder();
     if(dest === null) return;
 
-    const form = new FormData();
+    const form = new URLSearchParams();
     form.append('item_name', itemName);
     form.append('path', '{{ current_path }}');
     form.append('dest', dest);
@@ -411,7 +526,7 @@ async function pasteClipboard(){
         return;
     }
 
-    const form = new FormData();
+    const form = new URLSearchParams();
     form.append('item_name', clipboard.item);
     form.append('action', clipboard.action);
     form.append('path', clipboard.path);
@@ -459,7 +574,7 @@ async function renameFile(oldName){
 
     if(newName.trim() === "") return;
 
-    const form = new FormData();
+    const form = new URLSearchParams();
 
     form.append("old_name", oldName);
 
@@ -491,7 +606,7 @@ async function renameFile(oldName){
 
 const search = document.getElementById("searchInput");
 
-search.addEventListener("keyup", function(){
+search.addEventListener("input", function(){
 
     const keyword = this.value.toLowerCase();
 
@@ -503,6 +618,8 @@ search.addEventListener("keyup", function(){
             : "none";
 
     });
+
+    updateSelectionState();
 
 });
 
@@ -534,6 +651,9 @@ drop.addEventListener("drop", async e=>{
 
     if(files.length === 0) return;
 
+    const uploadStatus = document.getElementById("uploadStatus");
+    uploadStatus.textContent = "업로드 및 바이러스 검사 중…";
+
     const form = new FormData();
 
     form.append("path", "{{ current_path }}");
@@ -544,17 +664,24 @@ drop.addEventListener("drop", async e=>{
 
     }
 
-    const res = await fetch("/upload", {
-
-        method: "POST",
-
-        body: form
-
-    });
+    let res;
+    try {
+        res = await fetch("/upload", {
+            method: "POST",
+            body: form
+        });
+    } catch (error) {
+        uploadStatus.textContent = "업로드 요청을 보내지 못했어요. 서버 연결을 확인해 주세요.";
+        return;
+    }
 
     if(res.ok){
 
-        location.reload();
+        if(res.redirected){
+            location.href = res.url;
+        }else{
+            location.reload();
+        }
 
     }else{
 
