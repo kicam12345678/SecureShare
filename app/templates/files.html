@@ -123,6 +123,7 @@
         <span id="clipboardStatus" style="color:#C05151; font-weight:bold;"></span>
         <span id="selectionStatus" class="selection-status" aria-live="polite">0개 선택됨</span>
         <button id="selectVisibleFilesBtn" class="select-all-btn" type="button">전체 선택</button>
+        <button id="downloadSelectedBtn" class="download-selected-btn" type="button" disabled>선택 항목 ZIP 다운로드</button>
         <button id="clearSelectionBtn" class="clear-selection-btn" type="button" hidden>선택 해제</button>
 
     </div>
@@ -313,6 +314,7 @@ let openMenuTrigger = null;
 const selectAllFiles = document.getElementById('selectAllFiles');
 const selectionStatus = document.getElementById('selectionStatus');
 const selectVisibleFilesBtn = document.getElementById('selectVisibleFilesBtn');
+const downloadSelectedBtn = document.getElementById('downloadSelectedBtn');
 const clearSelectionBtn = document.getElementById('clearSelectionBtn');
 
 function updateSelectionState(){
@@ -326,6 +328,7 @@ function updateSelectionState(){
 
     selectionStatus.textContent = `${selectedRows.length}개 선택됨`;
     clearSelectionBtn.hidden = selectedRows.length === 0;
+    downloadSelectedBtn.disabled = selectedRows.length === 0;
 
     const visibleBoxes = visibleRows.map(row => row.querySelector('.file-select-checkbox'));
     const visibleSelected = visibleBoxes.filter(checkbox => checkbox.checked).length;
@@ -365,6 +368,26 @@ clearSelectionBtn.addEventListener('click', () => {
 });
 
 updateSelectionState();
+
+downloadSelectedBtn.addEventListener('click', () => {
+    const selected = [...document.querySelectorAll('#fileTable tbody tr.file-row')]
+        .filter(row => row.querySelector('.file-select-checkbox').checked)
+        .map(row => row.dataset.path ? `${row.dataset.path}/${row.dataset.name}` : row.dataset.name);
+    if(selected.length === 0) return;
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/download-selected';
+    form.hidden = true;
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'items';
+    input.value = JSON.stringify(selected);
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+});
 
 function closeActionMenu(){
     actionMenu.classList.add('hidden');
@@ -428,6 +451,7 @@ function openRowMenu(event){
 
     actionMenu.appendChild(buildMenuItem('✏ 이름 변경', () => renameFile(name)));
     actionMenu.appendChild(buildMenuItem('📂 이동', () => moveItem(name)));
+    actionMenu.appendChild(buildMenuItem('📄 복사', () => copyItem(name)));
     actionMenu.appendChild(buildMenuItem('✂ 잘라내기', () => cutItem(name)));
 
     const pasteButton = buildMenuItem('📋 붙여넣기', () => pasteClipboard());

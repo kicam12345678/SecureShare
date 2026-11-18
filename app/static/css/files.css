@@ -141,9 +141,25 @@ main{
     background:#a83f3f;
 }
 
-.select-all-btn:disabled{
+.select-all-btn:disabled,
+.download-selected-btn:disabled{
     opacity:.5;
     cursor:not-allowed;
+}
+
+.download-selected-btn{
+    min-height:36px;
+    padding:6px 12px;
+    border:0;
+    border-radius:9px;
+    color:#fff;
+    background:#7a3131;
+    cursor:pointer;
+    font-weight:700;
+}
+
+.download-selected-btn:not(:disabled):hover{
+    background:#5f1d1d;
 }
 
 .clear-selection-btn{
@@ -419,7 +435,6 @@ td:nth-child(6){
     background:#C05151;
 }
 
-.back-btn,
 .rename-btn,
 .move-btn,
 .cut-btn,
@@ -713,6 +728,7 @@ td:nth-child(6){
     }
 
     .select-all-btn,
+    .download-selected-btn,
     .clear-selection-btn{
         min-height:44px;
     }

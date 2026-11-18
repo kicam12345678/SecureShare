@@ -92,6 +92,10 @@ struct PasteForm {
 struct TrashForm {
     trash_name: String,
 }
+#[derive(Deserialize)]
+struct DownloadSelection {
+    items: String,
+}
 
 fn safe_rel(s: &str) -> Option<PathBuf> {
     let p = Path::new(s);
@@ -460,6 +464,203 @@ async fn download(
         .map(|p| file_response(p, true))
         .unwrap_or_else(|| StatusCode::NOT_FOUND.into_response())
 }
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = !0u32;
+    for byte in bytes {
+        crc ^= u32::from(*byte);
+        for _ in 0..8 {
+            crc = (crc >> 1) ^ (0xedb8_8320 & (0u32.wrapping_sub(crc & 1)));
+        }
+    }
+    !crc
+}
+fn zip_entry(
+    name: &str,
+    data: &[u8],
+    is_dir: bool,
+    archive: &mut Vec<u8>,
+    central: &mut Vec<u8>,
+    entries: &mut u16,
+) -> io::Result<()> {
+    let name = name.as_bytes();
+    let name_len = u16::try_from(name.len())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "ZIP filename is too long"))?;
+    let size = u32::try_from(data.len())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "ZIP entry exceeds 4 GiB"))?;
+    let offset = u32::try_from(archive.len())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "ZIP archive exceeds 4 GiB"))?;
+    let crc = crc32(data);
+    let flags: u16 = 1 << 11;
+    archive.extend_from_slice(&0x0403_4b50u32.to_le_bytes());
+    archive.extend_from_slice(&20u16.to_le_bytes());
+    archive.extend_from_slice(&flags.to_le_bytes());
+    archive.extend_from_slice(&0u16.to_le_bytes());
+    archive.extend_from_slice(&0u16.to_le_bytes());
+    archive.extend_from_slice(&0u16.to_le_bytes());
+    archive.extend_from_slice(&crc.to_le_bytes());
+    archive.extend_from_slice(&size.to_le_bytes());
+    archive.extend_from_slice(&size.to_le_bytes());
+    archive.extend_from_slice(&name_len.to_le_bytes());
+    archive.extend_from_slice(&0u16.to_le_bytes());
+    archive.extend_from_slice(name);
+    archive.extend_from_slice(data);
+
+    central.extend_from_slice(&0x0201_4b50u32.to_le_bytes());
+    central.extend_from_slice(&20u16.to_le_bytes());
+    central.extend_from_slice(&20u16.to_le_bytes());
+    central.extend_from_slice(&flags.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&crc.to_le_bytes());
+    central.extend_from_slice(&size.to_le_bytes());
+    central.extend_from_slice(&size.to_le_bytes());
+    central.extend_from_slice(&name_len.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&0u16.to_le_bytes());
+    central.extend_from_slice(&(if is_dir { 0x10u32 << 16 } else { 0 }).to_le_bytes());
+    central.extend_from_slice(&offset.to_le_bytes());
+    central.extend_from_slice(name);
+    *entries = entries
+        .checked_add(1)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "too many ZIP entries"))?;
+    Ok(())
+}
+fn zip_add_tree(
+    path: &Path,
+    name: &str,
+    archive: &mut Vec<u8>,
+    central: &mut Vec<u8>,
+    entries: &mut u16,
+) -> io::Result<()> {
+    let metadata = fs::symlink_metadata(path)?;
+    if metadata.file_type().is_symlink() {
+        return Ok(());
+    }
+    if metadata.is_dir() {
+        zip_entry(&format!("{name}/"), &[], true, archive, central, entries)?;
+        for entry in fs::read_dir(path)? {
+            let entry = entry?;
+            let child_name = format!("{name}/{}", entry.file_name().to_string_lossy());
+            zip_add_tree(&entry.path(), &child_name, archive, central, entries)?;
+        }
+    } else if metadata.is_file() {
+        zip_entry(name, &fs::read(path)?, false, archive, central, entries)?;
+    }
+    Ok(())
+}
+fn zip_folder(path: &Path, folder_name: &str) -> io::Result<Vec<u8>> {
+    let mut archive = Vec::new();
+    let mut central = Vec::new();
+    let mut entries = 0u16;
+    zip_add_tree(path, folder_name, &mut archive, &mut central, &mut entries)?;
+    let central_offset = u32::try_from(archive.len())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "ZIP archive exceeds 4 GiB"))?;
+    let central_size = u32::try_from(central.len())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "ZIP archive exceeds 4 GiB"))?;
+    archive.extend_from_slice(&central);
+    archive.extend_from_slice(&0x0605_4b50u32.to_le_bytes());
+    archive.extend_from_slice(&0u16.to_le_bytes());
+    archive.extend_from_slice(&0u16.to_le_bytes());
+    archive.extend_from_slice(&entries.to_le_bytes());
+    archive.extend_from_slice(&entries.to_le_bytes());
+    archive.extend_from_slice(&central_size.to_le_bytes());
+    archive.extend_from_slice(&central_offset.to_le_bytes());
+    archive.extend_from_slice(&0u16.to_le_bytes());
+    Ok(archive)
+}
+fn zip_selection(state: &AppState, items: &[String]) -> io::Result<Vec<u8>> {
+    let mut archive = Vec::new();
+    let mut central = Vec::new();
+    let mut entries = 0u16;
+    for item in items {
+        let path = path_under(&state.root, item)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid path"))?;
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "invalid filename"))?;
+        if !path.exists() || name == ".trash" || name.starts_with(".staging-") {
+            return Err(io::Error::new(io::ErrorKind::NotFound, "item not found"));
+        }
+        zip_add_tree(&path, name, &mut archive, &mut central, &mut entries)?;
+    }
+    if entries == 0 {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "no files selected"));
+    }
+    let central_offset = u32::try_from(archive.len())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "ZIP archive exceeds 4 GiB"))?;
+    let central_size = u32::try_from(central.len())
+        .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "ZIP archive exceeds 4 GiB"))?;
+    archive.extend_from_slice(&central);
+    archive.extend_from_slice(&0x0605_4b50u32.to_le_bytes());
+    archive.extend_from_slice(&0u16.to_le_bytes());
+    archive.extend_from_slice(&0u16.to_le_bytes());
+    archive.extend_from_slice(&entries.to_le_bytes());
+    archive.extend_from_slice(&entries.to_le_bytes());
+    archive.extend_from_slice(&central_size.to_le_bytes());
+    archive.extend_from_slice(&central_offset.to_le_bytes());
+    archive.extend_from_slice(&0u16.to_le_bytes());
+    Ok(archive)
+}
+fn zip_response(archive: Vec<u8>, filename: &str) -> Response {
+    let filename = format!("{}.zip", urlencoding::encode(filename));
+    let mut response = Response::new(Body::from(archive));
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/zip"),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("attachment; filename*=UTF-8''{filename}"))
+            .unwrap_or(HeaderValue::from_static("attachment; filename=download.zip")),
+    );
+    response
+}
+async fn download_folder(
+    State(s): State<Arc<AppState>>,
+    axum::extract::Path(name): axum::extract::Path<String>,
+) -> Response {
+    let Some(path) = path_under(&s.root, &name) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    if !path.is_dir() {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let Some(folder_name) = path.file_name().and_then(|n| n.to_str()) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let archive = match zip_folder(&path, folder_name) {
+        Ok(archive) => archive,
+        Err(error) => {
+            eprintln!("Folder archive failed: {error}");
+            return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+        }
+    };
+    zip_response(archive, folder_name)
+}
+async fn download_selected(
+    State(s): State<Arc<AppState>>,
+    Form(selection): Form<DownloadSelection>,
+) -> Response {
+    let items = match serde_json::from_str::<Vec<String>>(&selection.items) {
+        Ok(items) => items,
+        Err(error) => {
+            eprintln!("Selected item list was invalid: {error}");
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+    };
+    let archive = match zip_selection(&s, &items) {
+        Ok(archive) => archive,
+        Err(error) => {
+            eprintln!("Selected item archive failed: {error}");
+            return StatusCode::BAD_REQUEST.into_response();
+        }
+    };
+    zip_response(archive, "SecureShare-selected")
+}
 async fn preview(
     State(s): State<Arc<AppState>>,
     axum::extract::Path(name): axum::extract::Path<String>,
@@ -665,6 +866,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/create-folder", post(create_folder))
         .route("/rename", post(rename))
         .route("/download/{*filename}", get(download))
+        .route("/download-folder/{*filename}", get(download_folder))
+        .route("/download-selected", post(download_selected))
         .route("/preview/{*filename}", get(preview))
         .route("/delete/{*filename}", get(delete))
         .route("/folders", get(folders))
